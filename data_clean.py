@@ -123,21 +123,21 @@ plt.show()
 
 #visualization #4 - Stacked Bar
 
-# exclude inspections where the business wasn't actually open/available
+#exclude inspections where the business wasn't actually open/available
 excluded_statuses = ['Out of Business', 'Business Not Located', 'No Entry']
 df_status = df[~df['Results'].isin(excluded_statuses)]
 
-# count inspections for each facility type + result combination, then pivot to wide format
+#count inspections for each facility type + result combination, then pivot to wide format
 df_status = df_status.groupby(['Facility Type', 'Results']).size().unstack().fillna(0)
 
-# keep only the 5 facility types with the most total inspections
+#keep only the 5 facility types with the most total inspections
 top_facilities = df_status.sum(axis=1).nlargest(5).index
 filtered_data  = df_status.loc[top_facilities]
 
-# convert raw counts to proportions so facilities of different sizes are comparable
+#convert raw counts to proportions so facilities of different sizes are comparable
 props = filtered_data.div(filtered_data.sum(axis=1), axis=0)
 
-# assign colors by result name so each category always gets the right color
+#assign colors by result name so each category always gets the right color
 color_map = {
     'Fail':               '#d62728',
     'Not Ready':          '#ff7f0e',
@@ -156,7 +156,7 @@ ax.set_xlabel('')
 ax.set_ylabel('Share of Inspections', fontsize=12)
 plt.xticks(rotation=25, ha='right')
 
-# format y-axis as percentages
+#format y-axis as percentages
 ax.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
 ax.set_yticklabels(['0%', '25%', '50%', '75%', '100%'])
 
