@@ -11,13 +11,13 @@ print(df.isna().sum())
 # print(df["Violations"].unique())
 
 df["Inspection Date"] = pd.to_datetime(df["Inspection Date"], errors = "coerce")
+df = df[(df["Inspection Date"].dt.year == 2022) | (df["Inspection Date"].dt.year == 2026)]
 
 #visualization #1 - Geospatial
 import plotly.express as px
 
 
 #also filter out "Business Not Located" and "No Entry" 
-excluded_statuses = ['Out of Business', 'Business Not Located', 'No Entry']
  
 #ensure Latitude and Longitude are numeric
 df['Latitude']  = pd.to_numeric(df['Latitude'],  errors='coerce')
@@ -25,21 +25,19 @@ df['Longitude'] = pd.to_numeric(df['Longitude'], errors='coerce')
  
 
 #drop any rows missing coordinates
-df_map = df[~df['Results'].isin(excluded_statuses)].dropna(subset=['Latitude', 'Longitude'])
  
 #colors based on passing results
 result_colors = {
-    'Pass':               '#2ca02c',
-    'Pass w/ Conditions': '#98df8a',
-    'Fail':               '#d62728',
-    'Not Ready':          '#ff7f0e',
+    'Risk 3 (Low)':       '#2ca02c',
+    'Risk 2 (Medium)': "#d5c214",
+    'Risk 1 (High)':               '#d62728',
 }
 
 #create the map
 fig = px.scatter_map(
-    df_map,
+    df,
     lat="Latitude", lon="Longitude",
-    color="Results",
+    color="Risk",
     color_discrete_map=result_colors, 
     hover_name="DBA Name",
     hover_data=["Address", "Facility Type", "Risk"],
@@ -89,78 +87,70 @@ plt.show()
 # #visualization #3 - Multivariate
 
 
-# set keywords
-keywords = ['INSECT', 'TEMPERATURE', 'CLEANING', 'TOILET', 'EQUIPMENT', 'PERSONNEL', 'STORAGE']
+# 1. Set keywords and create boolean columns (Keep as is)
+keywords = ['INSECT', 'TEMPERATURE', 'CLEANING', 'TOILET', 'EQUIPMENT', 'STORAGE', 'PHYSICAL', 'FOOD']
 for word in keywords:
     df[word] = df['Violations'].str.contains(word, case=False, na=False)
- 
 
-#group by facility type and sum
-failure_reasons   = df.groupby('Facility Type')[keywords].sum()
+# 2. Group by 'Risk'
+failure_reasons = df.groupby('Risk')[keywords].sum()
 
-#normailze number by setting data to proportions
+# 3. Normalize: Convert counts to proportions (Keep as is)
 normalized_reasons = failure_reasons.div(failure_reasons.sum(axis=1), axis=0)
 
+# 4. Reorder and then TRANSPOSE (.T)
+risk_order = ['Risk 1 (High)', 'Risk 2 (Medium)', 'Risk 3 (Low)']
+# We transpose here so categories become rows and Risk becomes columns
+flipped_reasons = normalized_reasons.reindex(risk_order).fillna(0).T
 
-#filter for Top n facilities so the chart isn't too tall
-top_facilities    = failure_reasons.sum(axis=1).nlargest(10).index
-normalized_reasons = normalized_reasons.loc[top_facilities]
- 
+# 5. Plot the heatmap
+plt.figure(figsize=(10, 8)) # Adjusted height for better category reading
+sns.heatmap(flipped_reasons, annot=True, cmap="YlGnBu", fmt=".1%")
 
-#plot the heatmap
-plt.figure(figsize=(12, 8))
-sns.heatmap(normalized_reasons, annot=True, cmap="YlGnBu", fmt=".1%")
- 
-plt.title("Proportional Failure Reasons by Facility Type")
-plt.xlabel("Violation Category")
-plt.ylabel("Facility Type")
-plt.xticks(rotation=30, ha='right') 
+# Update labels to match the flip
+plt.title("What Drives the Failure? Violation Types by Assigned Risk Level", fontsize=14)
+plt.xlabel("Assigned Risk Level", fontsize=12)
+plt.ylabel("Violation Category", fontsize=12)
+
 plt.tight_layout()
 plt.show()
-
-
-
 
 #visualization #4 - Stacked Bar
 
-#exclude inspections where the business wasn't actually open/available
-excluded_statuses = ['Out of Business', 'Business Not Located', 'No Entry']
-df_status = df[~df['Results'].isin(excluded_statuses)]
+# 1. Prepare the Data: Group by Risk and Results
 
-#count inspections for each facility type + result combination, then pivot to wide format
-df_status = df_status.groupby(['Facility Type', 'Results']).size().unstack().fillna(0)
+target_results = ['Pass', 'Fail', 'Pass w/ Conditions']
+df = df[df['Results'].isin(target_results)]
 
-#keep only the 5 facility types with the most total inspections
-top_facilities = df_status.sum(axis=1).nlargest(5).index
-filtered_data  = df_status.loc[top_facilities]
+# We use normalize='index' to turn counts into percentages (0.0 to 1.0)
+risk_results = pd.crosstab(df['Risk'], df['Results'], normalize='index') * 100
 
-#convert raw counts to proportions so facilities of different sizes are comparable
-props = filtered_data.div(filtered_data.sum(axis=1), axis=0)
+# 2. Reorder for logical flow
+risk_order = ['Risk 1 (High)', 'Risk 2 (Medium)', 'Risk 3 (Low)']
+risk_results = risk_results.reindex(risk_order)
 
-#assign colors by result name so each category always gets the right color
-color_map = {
-    'Fail':               '#d62728',
-    'Not Ready':          '#ff7f0e',
-    'Pass':               '#2ca02c',
-    'Pass w/ Conditions': '#98df8a',
-}
-colors = [color_map[col] for col in props.columns if col in color_map]
+# 3. Create the Grouped Bar Chart
+ax = risk_results.plot(kind='bar', 
+                       stacked=False, 
+                       figsize=(12, 7), 
+                       color=['#e74c3c', '#2ecc71', '#f1c40f'], # Red, Yellow, Green
+                       width=0.8)
 
-ax = props.plot(kind='bar', stacked=True, figsize=(10, 6),
-                color=colors, edgecolor='white')
+# 4. Styling for clarity
+plt.title("Is Risk Predictive? Outcome Percentages by Assigned Risk Level", fontsize=15)
+plt.ylabel("Percentage of Inspections (%)", fontsize=12)
+plt.xlabel("City-Assigned Risk Level", fontsize=12)
+plt.legend(title="Inspection Result", bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.ylim(0, 100) # Ensure the scale is always 0-100%
 
+# Add percentage labels on top of the bars
+for p in ax.patches:
+    ax.annotate(f'{p.get_height():.1f}%', 
+                (p.get_x() + p.get_width() / 2., p.get_height()), 
+                ha = 'center', va = 'center', 
+                xytext = (0, 9), 
+                textcoords = 'offset points',
+                fontsize=9)
 
-
-ax.set_title('Inspection Outcomes by Facility Type', fontsize=14)
-ax.set_xlabel('')
-ax.set_ylabel('Share of Inspections', fontsize=12)
-plt.xticks(rotation=25, ha='right')
-
-#format y-axis as percentages
-ax.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
-ax.set_yticklabels(['0%', '25%', '50%', '75%', '100%'])
-
-plt.legend(title='Result', bbox_to_anchor=(1.01, 1), loc='upper left', frameon=False)
 plt.tight_layout()
 plt.show()
-
