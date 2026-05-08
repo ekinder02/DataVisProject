@@ -69,6 +69,7 @@ plt.xlabel("Risk Category", fontsize = 12)
 plt.ylabel("Number of Violations Found", fontsize = 12)
 
 plt.tight_layout()
+plt.savefig("boxplot_violations_by_risk.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 
@@ -103,6 +104,7 @@ plt.ylabel("Violation Types", fontsize=12)
 
 #show the plot
 plt.tight_layout()
+plt.savefig("heatmap_violation_types.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 
@@ -142,4 +144,5 @@ for p in ax.patches:
                 textcoords = "offset points", fontsize = 9)
 
 plt.tight_layout()
+plt.savefig("grouped_bar_results_by_risk.png", dpi=150, bbox_inches="tight")
 plt.show()
